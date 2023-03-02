@@ -1,9 +1,14 @@
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
+from fastapi import Depends
 from jose import jwt
 from decouple import config
 from passlib.context import CryptContext
+from sqlalchemy.orm import Session
 
+import crud
+import schemas
+from database import get_DB
 from schemas import TokenBase
 
 JWT_SECRET = config('secret')
@@ -101,3 +106,35 @@ def decrypt_token(enc_access_token: bytes):
     decrypted_token = fernet.decrypt(enc_access_token)
     decoded_token = decrypted_token.decode()
     return decoded_token
+
+
+def create_token_link(*, db_user: schemas.User, db: Session = Depends(get_DB)):
+    """
+    This function first makes token (either create or update) then returns email link
+    :param db_user:
+    :param db:
+    :return:
+    """
+    token = get_and_store_token(db_user=db_user, db=db)
+    encrypted_token = encrypt_token(token.access_token)
+    token = encrypted_token.decode("utf-8")
+    verification_link = f"http://localhost:8000/user/confirmation/{token}"
+    return verification_link
+
+
+def get_and_store_token(db_user: schemas.User, db: Session = Depends(get_DB)):
+    """
+    this function makes token (either create or update) then returns
+    :param db_user:
+    :param db:
+    :return:
+    """
+    token = encode_token(db_user.email)
+    # check if token already exists
+    db_token = crud.get_token(db, user_id=db_user.id)
+    if not db_token:
+        token = crud.create_token(db, token=token, user_id=db_user.id)
+    else:
+        if decode_token(db_token.access_token):
+            token = crud.update_token(db, token=token, token_id=db_token.id)
+    return token

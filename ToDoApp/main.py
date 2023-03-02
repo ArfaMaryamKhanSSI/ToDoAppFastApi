@@ -32,22 +32,16 @@ async def register(*, user: schemas.UserCreate = Body(default=None), db: Session
     hashed_password = utils.hash_password(user.password)
     user_db = schemas.UserCreate(email=user.email, name=user.name, password=hashed_password)
     stored_user = crud.create_user(db=db, user=user_db)
-    token = utils.encode_token(stored_user.email)
-    # check if token already exists
-    db_token = crud.get_token(db, user_id=stored_user.id)
-    if not db_token:
-        crud.create_token(db, token=token, user_id=stored_user.id)
-        encrypted_token = utils.encrypt_token(token.access_token)
-        token = encrypted_token.decode("utf-8")
-        verification_link = f"http://localhost:8000/user/confirmation/{token}"
-        background_tasks.add_task(auth_email.send_verification_email, token=verification_link, user_email=stored_user.email)
-        return verification_link
+    verification_link = utils.create_token_link(db_user=stored_user, db=db)
+    background_tasks.add_task(auth_email.send_verification_email, token=verification_link,
+                              user_email=stored_user.email)
+    return verification_link
 
 
 @app.get("/user/confirmation/{token}", tags=["users"])
 def confirmation(token: str, db: Session = Depends(get_DB)):
     """
-    this function confirms the user
+    this function confirms the user by
     :param token:
     :param db:
     :return:
@@ -55,16 +49,16 @@ def confirmation(token: str, db: Session = Depends(get_DB)):
     token = token.encode("utf-8")
     decrypt_token = utils.decrypt_token(token)
     decoded_token = utils.decode_token(decrypt_token)
-    if decoded_token:
-        user = crud.get_user_by_email(db, decoded_token.get("email"))
-        if user:
-            res = crud.confirmed_user(db, user.email)
-            if not res:
-                crud.confirmation(db, user.email)
-                return {"Message": "User Confirmed"}
-            raise HTTPException(status_code=400, detail="User already registered")
+    if not decoded_token:
+        raise HTTPException(status_code=400, detail="Token expired")
+    user = crud.get_user_by_email(db, decoded_token.get("email"))
+    if not user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    raise HTTPException(status_code=400, detail="Token expired")
+    res = crud.confirmed_user(db, user.email)
+    if res:
+        raise HTTPException(status_code=400, detail="User already registered")
+    crud.confirmation(db, user.email)
+    return {"Message": "User Confirmed"}
 
 
 if __name__ == "__main__":
