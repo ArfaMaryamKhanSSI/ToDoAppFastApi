@@ -1,18 +1,15 @@
 from typing import Union
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Body, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, Body, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from starlette import status
-
 import auth_email
 import utils
 import crud
 import schemas
 from database import get_DB
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 app = FastAPI()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
 @app.get("/")
@@ -20,7 +17,7 @@ async def root():
     return {"message": "Hello World"}
 
 
-@app.post("/user/register/", tags=["signin/signup"], response_model=dict)
+@app.post("/register/", tags=["todo/signup"], response_model=dict)
 async def register(*, user: schemas.UserCreate = Body(default=None), db: Session = Depends(get_DB),
                    background_tasks: BackgroundTasks):
     """
@@ -42,7 +39,7 @@ async def register(*, user: schemas.UserCreate = Body(default=None), db: Session
     return {"message": "please confirm your account on this link", "link": verification_link}
 
 
-@app.get("/user/confirmation/{token}", tags=["signin/signup"])
+@app.get("/confirmation/{token}", tags=["todo/signup-confirmation"])
 def confirmation(token: str, db: Session = Depends(get_DB)):
     """
     this function confirms the user by
@@ -65,32 +62,30 @@ def confirmation(token: str, db: Session = Depends(get_DB)):
     return {"Message": "User Confirmed"}
 
 
-@app.post("/login/", response_model=Union[schemas.TokenBase, dict],  tags=["signin/signup"])
-async def login(*, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_DB),
+@app.post("/login/", response_model=Union[schemas.TokenBase, dict], tags=["todo/signin"])
+async def login(*, req: Request, user: schemas.UserLogin = None, db: Session = Depends(get_DB),
                 background_tasks: BackgroundTasks):
     """
-    This function returns token on authentication
-    If user is not confirmed yet, it sends email again and also returns confirmation link
-
-    :param form_data:
+    this func returns token if user is confirmed else it returns confirmation link
+    :param req:
+    :param user:
     :param db:
     :param background_tasks:
     :return:
     """
-    db_user = crud.get_user_by_email(db, user_email=form_data.username)
+    data = await req.json()
+    db_user = crud.get_user_by_email(db, user_email=data['email'])
     if not db_user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User does not exist",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="User does not exist"
         )
 
-    is_user = utils.authenticate_user(form_data.username, form_data.password, db_user)
+    is_user = utils.authenticate_user(data['email'], data['password'], db_user)
     if not is_user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Incorrect username or password"
         )
     res = crud.confirmed_user(db, db_user.email)
     if res:
@@ -104,4 +99,4 @@ async def login(*, form_data: OAuth2PasswordRequestForm = Depends(), db: Session
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

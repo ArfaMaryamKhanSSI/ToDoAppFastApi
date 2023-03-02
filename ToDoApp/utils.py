@@ -118,7 +118,7 @@ def create_token_link(*, db_user: schemas.User, db: Session = Depends(get_DB)):
     token = get_and_store_token(db_user=db_user, db=db)
     encrypted_token = encrypt_token(token.access_token)
     token = encrypted_token.decode("utf-8")
-    verification_link = f"http://localhost:8000/user/confirmation/{token}"
+    verification_link = f"http://localhost:8000/confirmation/{token}"
     return verification_link
 
 
