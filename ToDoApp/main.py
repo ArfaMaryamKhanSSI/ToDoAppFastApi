@@ -1,14 +1,18 @@
+from typing import Union
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Body, BackgroundTasks
 from sqlalchemy.orm import Session
+from starlette import status
 
 import auth_email
 import utils
 import crud
 import schemas
 from database import get_DB
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 app = FastAPI()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
 @app.get("/")
@@ -16,7 +20,7 @@ async def root():
     return {"message": "Hello World"}
 
 
-@app.post("/user/register/", tags=["users"], response_model=str)
+@app.post("/user/register/", tags=["signin/signup"], response_model=dict)
 async def register(*, user: schemas.UserCreate = Body(default=None), db: Session = Depends(get_DB),
                    background_tasks: BackgroundTasks):
     """
@@ -35,10 +39,10 @@ async def register(*, user: schemas.UserCreate = Body(default=None), db: Session
     verification_link = utils.create_token_link(db_user=stored_user, db=db)
     background_tasks.add_task(auth_email.send_verification_email, token=verification_link,
                               user_email=stored_user.email)
-    return verification_link
+    return {"message": "please confirm your account on this link", "link": verification_link}
 
 
-@app.get("/user/confirmation/{token}", tags=["users"])
+@app.get("/user/confirmation/{token}", tags=["signin/signup"])
 def confirmation(token: str, db: Session = Depends(get_DB)):
     """
     this function confirms the user by
@@ -59,6 +63,44 @@ def confirmation(token: str, db: Session = Depends(get_DB)):
         raise HTTPException(status_code=400, detail="User already registered")
     crud.confirmation(db, user.email)
     return {"Message": "User Confirmed"}
+
+
+@app.post("/login/", response_model=Union[schemas.TokenBase, dict],  tags=["signin/signup"])
+async def login(*, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_DB),
+                background_tasks: BackgroundTasks):
+    """
+    This function returns token on authentication
+    If user is not confirmed yet, it sends email again and also returns confirmation link
+
+    :param form_data:
+    :param db:
+    :param background_tasks:
+    :return:
+    """
+    db_user = crud.get_user_by_email(db, user_email=form_data.username)
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User does not exist",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    is_user = utils.authenticate_user(form_data.username, form_data.password, db_user)
+    if not is_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    res = crud.confirmed_user(db, db_user.email)
+    if res:
+        return utils.get_and_store_token(db_user=db_user, db=db)
+
+    else:
+        verification_link = utils.create_token_link(db_user=db_user, db=db)
+        background_tasks.add_task(auth_email.send_verification_email, token=verification_link,
+                                  user_email=db_user.email)
+        return {"message": "please confirm your account on this link", "link": verification_link}
 
 
 if __name__ == "__main__":

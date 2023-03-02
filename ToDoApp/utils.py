@@ -138,3 +138,17 @@ def get_and_store_token(db_user: schemas.User, db: Session = Depends(get_DB)):
         if decode_token(db_token.access_token):
             token = crud.update_token(db, token=token, token_id=db_token.id)
     return token
+
+
+# authenticate user
+def authenticate_user(email: str, password: str, db_user: schemas.User):
+    """
+    This function verifies if user details input is correct
+    :param email:
+    :param password:
+    :param db_user:
+    :return:
+    """
+    if email == db_user.email and verify_password(hashed_password=db_user.password, plain_password=password):
+        return db_user
+    return False
