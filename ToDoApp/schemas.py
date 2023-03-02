@@ -1,5 +1,5 @@
 from datetime import date
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import List, Union
 
 
@@ -25,7 +25,7 @@ class Task(TaskBase):
 
 # User Schema
 class UserBase(BaseModel):
-    email: str
+    email: EmailStr
     name: str
 
 
@@ -37,6 +37,27 @@ class User(UserBase):
     id: int
     tasks: List[Task] = []
 
+    registered_on: date
+    registration_confirm: bool = False
+
     class Config:
         orm_mode = True
 
+
+# token schema
+class TokenBase(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenCreateAndReturn(TokenBase):
+    user_id: int
+
+    class Config:
+        orm_mode = True
+
+
+# user login schema
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
