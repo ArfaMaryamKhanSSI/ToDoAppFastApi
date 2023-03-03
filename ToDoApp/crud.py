@@ -77,3 +77,16 @@ def get_token(db: Session, user_id: int):
     :return:
     """
     return db.query(models.Token).filter(models.Token.user_id == user_id).first()
+
+
+def update_token(db: Session, token: schemas.TokenBase, token_id: int):
+    """
+    This function updates the token value (changed expiry time)
+    :param db:
+    :param token:
+    :param token_id:
+    :return:
+    """
+    db.query(models.Token).filter(models.Token.id == token_id).update(token.dict())
+    db.commit()
+    return token
