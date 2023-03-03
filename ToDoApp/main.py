@@ -130,5 +130,38 @@ def get_user_tasks(user: schemas.User = Depends(utils.get_current_user), db: Ses
     return crud.get_tasks_by_user(db, user_id=user.id)
 
 
+@app.put("/user/task/{task_id}", response_model=dict)
+async def update_task(task_id: int, user: schemas.User = Depends(utils.get_current_user),
+                      task: schemas.TaskCreate = None, db: Session = Depends(get_DB)):
+    """
+    this function updates user task
+    :param task_id:
+    :param user:
+    :param task:
+    :param db:
+    :return:
+    """
+    res = crud.update_task_by_user(db, user_id=user.id, task_id=task_id, task=task)
+    if not res:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"message": "task updated successfully"}
+
+
+@app.delete("/user/task/{task_id}", response_model=dict)
+def delete_user_task(user: schemas.User = Depends(utils.get_current_user), task_id: int = 0,
+                     db: Session = Depends(get_DB)):
+    """
+    this function deletes a certain task by user
+    :param user:
+    :param task_id:
+    :param db:
+    :return:
+    """
+    res = crud.delete_task(db, user_id=user.id, task_id=task_id)
+    if res != 1:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"Message": f"task is successfully deleted."}
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

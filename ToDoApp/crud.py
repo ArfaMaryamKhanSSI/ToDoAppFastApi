@@ -125,3 +125,46 @@ def get_tasks_by_user(db: Session, user_id: int):
     :return:
     """
     return db.query(models.Task).filter(models.Task.owner_id == user_id).all()
+
+
+def get_single_task_by_user(db: Session, user_id: int, task_id: int):
+    """
+    this function returns a task by user
+    :param db:
+    :param user_id:
+    :param task_id:
+    :return:
+    """
+    return db.query(models.Task).filter(models.Task.id == task_id, models.Task.owner_id == user_id).first()
+
+
+def update_task_by_user(db: Session, user_id: int, task_id: int, task: schemas.TaskCreate):
+    """
+    this function first queries if task exists and then updates the task
+    :param db:
+    :param user_id:
+    :param task_id:
+    :param task:
+    :return:
+    """
+    if get_single_task_by_user(db, user_id, task_id):
+        db.query(models.Task).filter(models.Task.id == task_id).update(task.dict())
+        db.commit()
+        return task
+    return None
+
+
+def delete_task(db: Session, user_id: int, task_id: int):
+    """
+    this function deletes user task
+    :param db:
+    :param user_id:
+    :param task_id:
+    :return:
+    """
+    if not get_single_task_by_user(db, user_id, task_id):
+        return None
+    res = db.query(models.Task).filter(models.Task.owner_id == user_id, models.Task.id == task_id).delete()
+    db.commit()
+    return res
+
