@@ -108,7 +108,7 @@ def decrypt_token(enc_access_token: bytes):
     return decoded_token
 
 
-def create_token_link(*, db_user: schemas.User, db: Session = Depends(get_DB)):
+def create_token_link(db_user: schemas.User, db: Session = Depends(get_DB)):
     """
     This function first makes token (either create or update) then returns email link
     :param db_user:
@@ -118,7 +118,7 @@ def create_token_link(*, db_user: schemas.User, db: Session = Depends(get_DB)):
     token = get_and_store_token(db_user=db_user, db=db)
     encrypted_token = encrypt_token(token.access_token)
     token = encrypted_token.decode("utf-8")
-    verification_link = f"http://localhost:8000/user/confirmation/{token}"
+    verification_link = f"http://localhost:8000/confirmation/{token}"
     return verification_link
 
 
@@ -138,3 +138,17 @@ def get_and_store_token(db_user: schemas.User, db: Session = Depends(get_DB)):
         if decode_token(db_token.access_token):
             token = crud.update_token(db, token=token, token_id=db_token.id)
     return token
+
+
+# authenticate user
+def authenticate_user(email: str, password: str, db_user: schemas.User):
+    """
+    This function verifies if user details input is correct
+    :param email:
+    :param password:
+    :param db_user:
+    :return:
+    """
+    if email == db_user.email and verify_password(hashed_password=db_user.password, plain_password=password):
+        return db_user
+    return False
