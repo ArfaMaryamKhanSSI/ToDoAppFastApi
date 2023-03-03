@@ -115,3 +115,13 @@ def get_task_by_title(db: Session, task_title: str):
     :return:
     """
     return db.query(models.Task).filter(models.Task.title == task_title).first()
+
+
+def get_tasks_by_user(db: Session, user_id: int):
+    """
+    get all tasks by userid
+    :param db:
+    :param user_id:
+    :return:
+    """
+    return db.query(models.Task).filter(models.Task.owner_id == user_id).all()

@@ -1,5 +1,5 @@
 import uvicorn
-from typing import Union
+from typing import Union, List
 
 from fastapi import Depends, FastAPI, HTTPException, Body, BackgroundTasks, Request
 from sqlalchemy.orm import Session
@@ -102,6 +102,13 @@ async def login(req: Request, user: schemas.UserLogin = None, db: Session = Depe
 @app.post("/user/task/", response_model=dict, tags=["todo/create-task"])
 def create_task(task: schemas.TaskCreate, user: schemas.User = Depends(utils.get_current_user),
                 db: Session = Depends(get_DB)):
+    """
+    this function adds task in db for user
+    :param task:
+    :param user:
+    :param db:
+    :return:
+    """
     if_exist = crud.get_task_by_title(db=db, task_title=task.title)
     if if_exist:
         raise HTTPException(
@@ -110,6 +117,17 @@ def create_task(task: schemas.TaskCreate, user: schemas.User = Depends(utils.get
         )
     crud.create_task(db, task=task, user_id=user.id)
     return {"message": "task added successfully"}
+
+
+@app.get("/user/tasks/", response_model=List[schemas.Task])
+def get_user_tasks(user: schemas.User = Depends(utils.get_current_user), db: Session = Depends(get_DB)):
+    """
+    this function returns tasks by specific user
+    :param user:
+    :param db:
+    :return:
+    """
+    return crud.get_tasks_by_user(db, user_id=user.id)
 
 
 if __name__ == "__main__":
