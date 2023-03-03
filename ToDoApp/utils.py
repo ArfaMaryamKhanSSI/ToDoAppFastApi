@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
-from fastapi import Depends
-from jose import jwt
+from fastapi import Depends, HTTPException, Request
+from jose import jwt, JWTError
 from decouple import config
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
+from starlette import status
 
 import crud
 import schemas
@@ -152,3 +153,23 @@ def authenticate_user(email: str, password: str, db_user: schemas.User):
     if email == db_user.email and verify_password(hashed_password=db_user.password, plain_password=password):
         return db_user
     return False
+
+
+async def get_current_user(req: Request, db: Session = Depends(get_DB)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials"
+    )
+    try:
+        token = req.headers["Authorization"]
+        token = token.split(" ")[1]
+        payload = decode_token(token)
+        if not payload:
+            raise credentials_exception
+        email: str = payload.get("email")
+    except JWTError:
+        raise credentials_exception
+    user = crud.get_user_by_email(db, email)
+    if user is None:
+        raise credentials_exception
+    return user

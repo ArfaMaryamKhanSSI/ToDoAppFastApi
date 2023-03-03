@@ -90,3 +90,28 @@ def update_token(db: Session, token: schemas.TokenBase, token_id: int):
     db.query(models.Token).filter(models.Token.id == token_id).update(token.dict())
     db.commit()
     return token
+
+
+def create_task(db: Session, task: schemas.TaskCreate, user_id: int):
+    """
+    this function creates new task for user in db
+    :param db:
+    :param task:
+    :param user_id:
+    :return:
+    """
+    db_task = models.Task(**task.dict(), owner_id=user_id, status=False)
+    db.add(db_task)
+    db.commit()
+    db.refresh(db_task)
+    return db_task
+
+
+def get_task_by_title(db: Session, task_title: str):
+    """
+    this func returns a
+    :param db:
+    :param task_title:
+    :return:
+    """
+    return db.query(models.Task).filter(models.Task.title == task_title).first()

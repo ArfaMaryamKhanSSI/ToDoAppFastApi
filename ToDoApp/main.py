@@ -99,5 +99,18 @@ async def login(req: Request, user: schemas.UserLogin = None, db: Session = Depe
         return {"message": "please confirm your account on this link", "link": verification_link}
 
 
+@app.post("/user/task/", response_model=dict, tags=["todo/create-task"])
+def create_task(task: schemas.TaskCreate, user: schemas.User = Depends(utils.get_current_user),
+                db: Session = Depends(get_DB)):
+    if_exist = crud.get_task_by_title(db=db, task_title=task.title)
+    if if_exist:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Task already exists"
+        )
+    crud.create_task(db, task=task, user_id=user.id)
+    return {"message": "task added successfully"}
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
