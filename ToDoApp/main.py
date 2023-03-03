@@ -1,7 +1,9 @@
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Body, BackgroundTasks
-from sqlalchemy.orm import Session
+from typing import Union
 
+from fastapi import Depends, FastAPI, HTTPException, Body, BackgroundTasks, Request
+from sqlalchemy.orm import Session
+from starlette import status
 import auth_email
 import utils
 import crud
@@ -16,9 +18,9 @@ async def root():
     return {"message": "Hello World"}
 
 
-@app.post("/user/register/", tags=["users"], response_model=str)
-async def register(*, user: schemas.UserCreate = Body(default=None), db: Session = Depends(get_DB),
-                   background_tasks: BackgroundTasks):
+@app.post("/register/", tags=["todo/signup"], response_model=dict)
+async def register(user: schemas.UserCreate = Body(default=None), db: Session = Depends(get_DB),
+                   background_tasks: BackgroundTasks = None):
     """
     This function adds the user in DB and sends a verification email
     :param user:
@@ -35,10 +37,10 @@ async def register(*, user: schemas.UserCreate = Body(default=None), db: Session
     verification_link = utils.create_token_link(db_user=stored_user, db=db)
     background_tasks.add_task(auth_email.send_verification_email, token=verification_link,
                               user_email=stored_user.email)
-    return verification_link
+    return {"message": "please confirm your account on this link", "link": verification_link}
 
 
-@app.get("/user/confirmation/{token}", tags=["users"])
+@app.get("/confirmation/{token}", tags=["todo/signup-confirmation"])
 def confirmation(token: str, db: Session = Depends(get_DB)):
     """
     this function confirms the user by
@@ -61,5 +63,41 @@ def confirmation(token: str, db: Session = Depends(get_DB)):
     return {"Message": "User Confirmed"}
 
 
+@app.post("/login/", response_model=Union[schemas.TokenBase, dict], tags=["todo/signin"])
+async def login(req: Request, user: schemas.UserLogin = None, db: Session = Depends(get_DB),
+                background_tasks: BackgroundTasks = None):
+    """
+    this func returns token if user is confirmed else it returns confirmation link
+    :param req:
+    :param user:
+    :param db:
+    :param background_tasks:
+    :return:
+    """
+    data = await req.json()
+    db_user = crud.get_user_by_email(db, user_email=data['email'])
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User does not exist"
+        )
+
+    is_user = utils.authenticate_user(data['email'], data['password'], db_user)
+    if not is_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password"
+        )
+    res = crud.confirmed_user(db, db_user.email)
+    if res:
+        return utils.get_and_store_token(db_user=db_user, db=db)
+
+    else:
+        verification_link = utils.create_token_link(db_user=db_user, db=db)
+        background_tasks.add_task(auth_email.send_verification_email, token=verification_link,
+                                  user_email=db_user.email)
+        return {"message": "please confirm your account on this link", "link": verification_link}
+
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
