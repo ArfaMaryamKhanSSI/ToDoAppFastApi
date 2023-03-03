@@ -108,7 +108,7 @@ def decrypt_token(enc_access_token: bytes):
     return decoded_token
 
 
-def create_token_link(*, db_user: schemas.User, db: Session = Depends(get_DB)):
+def create_token_link(db_user: schemas.User, db: Session = Depends(get_DB)):
     """
     This function first makes token (either create or update) then returns email link
     :param db_user:

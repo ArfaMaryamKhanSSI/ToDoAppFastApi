@@ -18,8 +18,8 @@ async def root():
 
 
 @app.post("/register/", tags=["todo/signup"], response_model=dict)
-async def register(*, user: schemas.UserCreate = Body(default=None), db: Session = Depends(get_DB),
-                   background_tasks: BackgroundTasks):
+async def register(user: schemas.UserCreate = Body(default=None), db: Session = Depends(get_DB),
+                   background_tasks: BackgroundTasks = None):
     """
     This function adds the user in DB and sends a verification email
     :param user:
@@ -63,8 +63,8 @@ def confirmation(token: str, db: Session = Depends(get_DB)):
 
 
 @app.post("/login/", response_model=Union[schemas.TokenBase, dict], tags=["todo/signin"])
-async def login(*, req: Request, user: schemas.UserLogin = None, db: Session = Depends(get_DB),
-                background_tasks: BackgroundTasks):
+async def login(req: Request, user: schemas.UserLogin = None, db: Session = Depends(get_DB),
+                background_tasks: BackgroundTasks = None):
     """
     this func returns token if user is confirmed else it returns confirmation link
     :param req:
