@@ -156,6 +156,12 @@ def authenticate_user(email: str, password: str, db_user: schemas.User):
 
 
 async def get_current_user(req: Request, db: Session = Depends(get_DB)):
+    """
+    this func will return current user based on token value
+    :param req:
+    :param db:
+    :return:
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials"
