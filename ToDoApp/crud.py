@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 import models
 import schemas
-from datetime import datetime
+from datetime import datetime, date
 
 
 def get_user_by_email(db: Session, user_email: str):
@@ -168,3 +168,38 @@ def delete_task(db: Session, user_id: int, task_id: int):
     db.commit()
     return res
 
+
+def get_tasks_due_today(db: Session, user_id: int):
+    """
+    return list of all tasks due today
+    :param db:
+    :param user_id:
+    :return:
+    """
+    return db.query(models.Task).filter(models.Task.owner_id == user_id, models.Task.due_date == date.today(),
+                                        models.Task.status == False).all()
+
+
+def get_complete_tasks_by_user(db: Session, user_id: int):
+    """
+    returns list of completed tasks
+    :param db:
+    :param user_id:
+    :return:
+    """
+    return db.query(models.Task).filter(models.Task.owner_id == user_id, models.Task.status == True).all()
+
+
+def complete_task(db: Session, user_id: int, task_id: int):
+    """
+    updates status of a task
+    :param db:
+    :param user_id:
+    :param task_id:
+    :return:
+    """
+    if get_single_task_by_user(db, user_id, task_id):
+        db.query(models.Task).filter(models.Task.id == task_id).update({models.Task.status: True})
+        db.commit()
+        return {"Message": "successfully finished task"}
+    return {}

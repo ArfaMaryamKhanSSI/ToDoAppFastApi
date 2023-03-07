@@ -119,7 +119,7 @@ def create_task(task: schemas.TaskCreate, user: schemas.User = Depends(utils.get
     return {"message": "task added successfully"}
 
 
-@app.get("/user/tasks/", response_model=List[schemas.Task])
+@app.get("/user/tasks/", response_model=List[schemas.Task],  tags=["todo/get-tasks"])
 def get_user_tasks(user: schemas.User = Depends(utils.get_current_user), db: Session = Depends(get_DB)):
     """
     this function returns tasks by specific user
@@ -130,7 +130,7 @@ def get_user_tasks(user: schemas.User = Depends(utils.get_current_user), db: Ses
     return crud.get_tasks_by_user(db, user_id=user.id)
 
 
-@app.put("/user/task/{task_id}", response_model=dict)
+@app.put("/user/task/{task_id}", response_model=dict, tags=["todo/update-tasks"])
 async def update_task(task_id: int, user: schemas.User = Depends(utils.get_current_user),
                       task: schemas.TaskCreate = None, db: Session = Depends(get_DB)):
     """
@@ -147,7 +147,7 @@ async def update_task(task_id: int, user: schemas.User = Depends(utils.get_curre
     return {"message": "task updated successfully"}
 
 
-@app.delete("/user/task/{task_id}", response_model=dict)
+@app.delete("/user/task/{task_id}", response_model=dict, tags=["todo/delete-tasks"])
 def delete_user_task(user: schemas.User = Depends(utils.get_current_user), task_id: int = 0,
                      db: Session = Depends(get_DB)):
     """
@@ -161,6 +161,49 @@ def delete_user_task(user: schemas.User = Depends(utils.get_current_user), task_
     if res != 1:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"Message": f"task is successfully deleted."}
+
+
+@app.put("/user/complete-task/{task_id}", response_model=dict, tags=["todo/complete-tasks"])
+def complete_task(*, user: schemas.User = Depends(utils.get_current_user), task_id: int, db: Session = Depends(get_DB)):
+    """
+    changes status of user task
+    :param user:
+    :param task_id:
+    :param db:
+    :return:
+    """
+    res = crud.complete_task(db, user_id=user.id, task_id=task_id)
+    if not res:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return res
+
+
+@app.get("/user/complete-tasks/", response_model=Union[List[schemas.Task], dict], tags=["todo/all-complete-tasks"])
+def get_user_finished_tasks(*, user: schemas.User = Depends(utils.get_current_user), db: Session = Depends(get_DB)):
+    """
+    returns all the finished tasks
+    :param user:
+    :param db:
+    :return:
+    """
+    res = crud.get_complete_tasks_by_user(db, user_id=user.id)
+    if not res:
+        raise HTTPException(status_code=404, detail="No completed task found")
+    return res
+
+
+@app.get("/user/due-today/", response_model=Union[List[schemas.Task], dict], tags=["todo/tasks-due-today"])
+def get_user_due_today_tasks(*, user: schemas.User = Depends(utils.get_current_user), db: Session = Depends(get_DB)):
+    """
+    returns all the tasks due today
+    :param user:
+    :param db:
+    :return:
+    """
+    res = crud.get_tasks_due_today(db, user_id=user.id)
+    if not res:
+        raise HTTPException(status_code=404, detail="No tasks due today.")
+    return res
 
 
 if __name__ == "__main__":
