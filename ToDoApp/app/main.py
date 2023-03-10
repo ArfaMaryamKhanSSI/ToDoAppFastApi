@@ -1,14 +1,12 @@
 import uvicorn
 from typing import Union, List
 
-from fastapi import Depends, FastAPI, HTTPException, Body, BackgroundTasks, Request
+from fastapi import Depends, FastAPI, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from starlette import status
-import auth_email
-import utils
-import crud
-import schemas
-from database import get_DB
+from tasks import task
+from app import crud, utils, schemas
+from app.database import get_DB
 
 app = FastAPI()
 
@@ -19,13 +17,11 @@ async def root():
 
 
 @app.post("/register/", tags=["todo/signup"], response_model=dict)
-async def register(user: schemas.UserCreate = Body(default=None), db: Session = Depends(get_DB),
-                   background_tasks: BackgroundTasks = None):
+async def register(user: schemas.UserCreate = Body(default=None), db: Session = Depends(get_DB)):
     """
     This function adds the user in DB and sends a verification email
     :param user:
     :param db:
-    :param background_tasks:
     :return:
     """
     db_user = crud.get_user_by_email(db, user_email=user.email)
@@ -35,9 +31,16 @@ async def register(user: schemas.UserCreate = Body(default=None), db: Session = 
     user_db = schemas.UserCreate(email=user.email, name=user.name, password=hashed_password)
     stored_user = crud.create_user(db=db, user=user_db)
     verification_link = utils.create_token_link(db_user=stored_user, db=db)
-    background_tasks.add_task(auth_email.send_verification_email, token=verification_link,
-                              user_email=stored_user.email)
-    return {"message": "please confirm your account on this link", "link": verification_link}
+    r = task.app.send_task('task.send_verification_email', kwargs={'token': verification_link,
+                                                                   'user_email': stored_user.email})
+    return {"message": "please confirm your account on this link", "link": verification_link, "task_id": r.id}
+
+
+@app.get('/simple_task_status/<task_id>')
+def get_status(task_id):
+    stat = task.app.AsyncResult(task_id, app=task.app)
+    print("Invoking Method ")
+    return "Status of the Task " + str(stat.state)
 
 
 @app.get("/confirmation/{token}", tags=["todo/signup-confirmation"])
@@ -64,14 +67,12 @@ def confirmation(token: str, db: Session = Depends(get_DB)):
 
 
 @app.post("/login/", response_model=Union[schemas.TokenBase, dict], tags=["todo/signin"])
-async def login(req: Request, user: schemas.UserLogin = None, db: Session = Depends(get_DB),
-                background_tasks: BackgroundTasks = None):
+async def login(req: Request, user: schemas.UserLogin = None, db: Session = Depends(get_DB)):
     """
     this func returns token if user is confirmed else it returns confirmation link
     :param req:
     :param user:
     :param db:
-    :param background_tasks:
     :return:
     """
     data = await req.json()
@@ -94,9 +95,9 @@ async def login(req: Request, user: schemas.UserLogin = None, db: Session = Depe
 
     else:
         verification_link = utils.create_token_link(db_user=db_user, db=db)
-        background_tasks.add_task(auth_email.send_verification_email, token=verification_link,
-                                  user_email=db_user.email)
-        return {"message": "please confirm your account on this link", "link": verification_link}
+        r = task.app.send_task('task.send_verification_email', kwargs={'token': verification_link,
+                                                                       'user_email': db_user.email})
+        return {"message": "please confirm your account on this link", "link": verification_link, "task_id": r.id}
 
 
 @app.post("/user/task/", response_model=dict, tags=["todo/create-task"])
@@ -119,7 +120,7 @@ def create_task(task: schemas.TaskCreate, user: schemas.User = Depends(utils.get
     return {"message": "task added successfully"}
 
 
-@app.get("/user/tasks/", response_model=List[schemas.Task],  tags=["todo/get-tasks"])
+@app.get("/user/tasks/", response_model=List[schemas.Task], tags=["todo/get-tasks"])
 def get_user_tasks(user: schemas.User = Depends(utils.get_current_user), db: Session = Depends(get_DB)):
     """
     this function returns tasks by specific user

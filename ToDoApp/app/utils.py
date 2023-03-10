@@ -7,9 +7,9 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from starlette import status
 
-import crud
+from app import crud
 import schemas
-from database import get_DB
+from app.database import get_DB
 from schemas import TokenBase
 
 JWT_SECRET = config('secret')
