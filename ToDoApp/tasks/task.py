@@ -1,7 +1,8 @@
-from decouple import config
 import smtplib
 from email.message import EmailMessage
+from decouple import config
 import ssl
+from celery_conf import app
 
 context = ssl.create_default_context()
 sender = config('sender')
@@ -9,12 +10,6 @@ password = config('password')
 
 
 def create_template_email(receiver, link):
-    """
-    creates message for email
-    :param receiver:
-    :param link:
-    :return:
-    """
     msg = EmailMessage()
     msg['Subject'] = "Verify your Account"
     msg['From'] = sender
@@ -28,14 +23,11 @@ def create_template_email(receiver, link):
     return msg
 
 
+@app.task()
 def send_verification_email(token, user_email):
-    """
-    sends email to user email
-    :param token:
-    :param user_email:
-    :return:
-    """
     msg = create_template_email(receiver=user_email, link=token)
     with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=context) as smtp:
         smtp.login(sender, password)
         smtp.sendmail(sender, user_email, msg.as_string())
+        return True
+    return False
