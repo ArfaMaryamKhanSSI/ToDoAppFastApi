@@ -2,19 +2,18 @@ from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 from fastapi import Depends, HTTPException, Request
 from jose import jwt, JWTError
-from decouple import config
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from starlette import status
-
-from app import crud
+import os
+import crud
 import schemas
-from app.database import get_DB
+from database import get_DB
 from schemas import TokenBase
 
-JWT_SECRET = config('secret')
-JWT_ALGORITHM = config('algorithm')
-ACCESS_TOKEN_EXPIRE_MINUTES = config('expiry')
+JWT_SECRET = os.environ.get('jwt_secret')
+JWT_ALGORITHM = os.environ.get('jwt_algorithm')
+ACCESS_TOKEN_EXPIRE_MINUTES = os.environ.get('jwt_expiry')
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -119,7 +118,7 @@ def create_token_link(db_user: schemas.User, db: Session = Depends(get_DB)):
     token = get_and_store_token(db_user=db_user, db=db)
     encrypted_token = encrypt_token(token.access_token)
     token = encrypted_token.decode("utf-8")
-    verification_link = f"http://localhost:8000/confirmation/{token}"
+    verification_link = f"http://localhost:{os.environ.get('FASTAPI_PORT')}/confirmation/{token}"
     return verification_link
 
 
