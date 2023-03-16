@@ -44,8 +44,8 @@ services:
 
   worker:
     container_name: worker
-    build: ./app
-    command: celery -A main.celery worker --loglevel=info
+    build: .
+    command: celery -A app.main.celery worker --loglevel=info
     depends_on:
       rabbitmq:
           condition: service_healthy
@@ -55,7 +55,7 @@ services:
       - CELERY_BROKER_URL=${CELERY_BROKER_URL}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
     volumes:
-      - ./app:/app
+      - .:/app
     networks:
       - frcp
     env_file:
@@ -63,16 +63,16 @@ services:
 
   fastapi:
     container_name: fastapi
-    build: ./app
+    build: .
     volumes:
-      - ./app:/app
+      - .:/app
     ports:
       - "${FASTAPI_PORT}:8000"
     networks:
       - frcp
     env_file:
       - .env
-    command: sh -c "uvicorn main:app --host ${FASTAPI_HOST} --port ${FASTAPI_PORT} --reload"
+    command: sh -c "uvicorn app.main:app --host ${FASTAPI_HOST} --port ${FASTAPI_PORT} --reload"
 
   pgadmin:
     container_name: pgadmin

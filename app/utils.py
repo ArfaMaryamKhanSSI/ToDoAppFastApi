@@ -6,10 +6,10 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from starlette import status
 import os
-import crud
-import schemas
-from database import get_DB
-from schemas import TokenBase
+import app.crud as crud
+import app.schemas as schemas
+from app.database import get_DB
+from app.schemas import TokenBase
 
 JWT_SECRET = os.environ.get('jwt_secret')
 JWT_ALGORITHM = os.environ.get('jwt_algorithm')
@@ -22,7 +22,7 @@ def generate_encryption_key():
     Generates a key and save it into a file
     """
     key = Fernet.generate_key()
-    with open("secret.key", "wb") as key_file:
+    with open("app/secret.key", "wb") as key_file:
         key_file.write(key)
 
 
@@ -30,7 +30,7 @@ def load_key():
     """
     Load the previously generated key
     """
-    return open("secret.key", "rb").read()
+    return open("app/secret.key", "rb").read()
 
 
 def encode_token(email: str):
