@@ -4,9 +4,11 @@ from celery import Celery
 from fastapi import Depends, FastAPI, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from starlette import status
-import task
-import crud, utils, schemas
-from database import get_DB
+import app.task as task
+import app.crud as crud
+import app.utils as utils
+import app.schemas as schemas
+from app.database import get_DB
 
 app = FastAPI()
 

@@ -1,4 +1,4 @@
-venv/
+ToDoApp/venv/
 .idea/
 ./
 __pycache__/
