@@ -6,7 +6,7 @@ from datetime import datetime, date
 
 def get_user_by_email(db: Session, user_email: str):
     """
-    this func returns the user with given email
+    this func returns the user given email
     :param db:
     :param user_email:
     :return:

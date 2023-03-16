@@ -1,14 +1,19 @@
-import uvicorn
+import os
 from typing import Union, List
-
+from celery import Celery
 from fastapi import Depends, FastAPI, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from starlette import status
-from tasks import task
-from app import crud, utils, schemas
-from app.database import get_DB
+import task
+import crud, utils, schemas
+from database import get_DB
 
 app = FastAPI()
+
+celery = Celery('task', broker=os.environ.get("CELERY_BROKER_URL"),
+                backend=os.environ.get("CELERY_RESULT_BACKEND"))
+
+app.celery = celery
 
 
 @app.get("/")
@@ -31,8 +36,7 @@ async def register(user: schemas.UserCreate = Body(default=None), db: Session = 
     user_db = schemas.UserCreate(email=user.email, name=user.name, password=hashed_password)
     stored_user = crud.create_user(db=db, user=user_db)
     verification_link = utils.create_token_link(db_user=stored_user, db=db)
-    r = task.app.send_task('task.send_verification_email', kwargs={'token': verification_link,
-                                                                   'user_email': stored_user.email})
+    r = task.send_verification_email.delay(verification_link, stored_user.email)
     return {"message": "please confirm your account on this link", "link": verification_link, "task_id": r.id}
 
 
@@ -95,8 +99,7 @@ async def login(req: Request, user: schemas.UserLogin = None, db: Session = Depe
 
     else:
         verification_link = utils.create_token_link(db_user=db_user, db=db)
-        r = task.app.send_task('task.send_verification_email', kwargs={'token': verification_link,
-                                                                       'user_email': db_user.email})
+        r = task.send_verification_email.delay(verification_link, db_user.email)
         return {"message": "please confirm your account on this link", "link": verification_link, "task_id": r.id}
 
 
@@ -205,7 +208,3 @@ def get_user_due_today_tasks(*, user: schemas.User = Depends(utils.get_current_u
     if not res:
         raise HTTPException(status_code=404, detail="No tasks due today.")
     return res
-
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import relationship
-from app.database import Base
+from database import Base, engine
 from sqlalchemy import String, Boolean, Integer, Column, ForeignKey, Date
 
 
@@ -37,3 +37,6 @@ class Token(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     access_token = Column(String)
     token_type = Column(String)
+
+
+Base.metadata.create_all(bind=engine)
