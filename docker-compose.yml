@@ -1,4 +1,4 @@
-version: "3"
+version: "3.11"
 
 services:
   postgres:
@@ -8,9 +8,9 @@ services:
       - .data/:/var/lib/postgresql/
     restart: always
     ports:
-      - "${DB_PORT}:5432"
+      - "${DB_PORT}:${DB_PORT}"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -p $DB_PORT -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -p ${DB_PORT} -d ${DB_NAME}"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -18,15 +18,19 @@ services:
       - POSTGRES_USER=${DB_USERNAME}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
-    networks:
-      - frcp
+      - PGPORT=${DB_PORT}
     env_file:
       - .env
 
   rabbitmq:
     container_name: rabbitmq
     hostname: rabbitmq
-    image: rabbitmq:management-alpine
+    build:
+      context: .
+      dockerfile: Rabbitmq.Dockerfile
+      args:
+        - RABBITMQ_MANAGEMENT_PORT=${RABBITMQ_MANAGEMENT_PORT}
+        - RABBITMQ_PORT=${RABBITMQ_PORT}
     restart: always
     healthcheck:
       test: rabbitmq-diagnostics -q ping
@@ -37,14 +41,22 @@ services:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
       - RABBITMQ_DEFAULT_VHOST=/
-    networks:
-      - frcp
     env_file:
       - .env
+    ports:
+      - "${RABBITMQ_MANAGEMENT_PORT}:${RABBITMQ_MANAGEMENT_PORT}"
+
 
   worker:
     container_name: worker
+    hostname: worker
     build: .
+    healthcheck:
+      test: ["CMD-SHELL", "celery inspect ping --destination celery@worker"]
+      interval: 30s
+      start_period: 10s
+      timeout: 30s
+      retries: 3
     command: celery -A app.main.celery worker --loglevel=info
     depends_on:
       rabbitmq:
@@ -56,8 +68,6 @@ services:
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
     volumes:
       - .:/app
-    networks:
-      - frcp
     env_file:
       - .env
 
@@ -67,12 +77,15 @@ services:
     volumes:
       - .:/app
     ports:
-      - "${FASTAPI_PORT}:8000"
-    networks:
-      - frcp
+      - "${FASTAPI_PORT}:${FASTAPI_PORT}"
+    expose:
+      - "${FASTAPI_PORT}"
     env_file:
       - .env
     command: sh -c "uvicorn app.main:app --host ${FASTAPI_HOST} --port ${FASTAPI_PORT} --reload"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   pgadmin:
     container_name: pgadmin
@@ -81,17 +94,43 @@ services:
     environment:
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+      - PGADMIN_LISTEN_PORT=${PGADMIN_PORT}
     ports:
-      - "${PGADMIN_PORT}:80"
+      - "${PGADMIN_PORT}:${PGADMIN_PORT}"
+    expose:
+      - "${PGADMIN_PORT}"
     depends_on:
     - postgres
     env_file:
       - .env
-    networks:
-      - frcp
 
+  flower:
+    container_name: flower
+#    image: mher/flower:latest
+    build: .
+    command: celery -A app.main.celery flower --port=${FLOWER_PORT}
+    ports:
+      - "${FLOWER_PORT}:${FLOWER_PORT}"
+    environment:
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+    depends_on:
+      worker:
+        condition: service_healthy
+    env_file:
+      - .env
 
-networks:
-  frcp:
-    external: true
-
+  beat:
+    container_name: beat
+    build: .
+    command: celery -A app.main.celery beat --loglevel=info
+    depends_on:
+      worker:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+    volumes:
+      - .:/app

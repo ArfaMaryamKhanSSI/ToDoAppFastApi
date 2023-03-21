@@ -107,14 +107,15 @@ def create_task(db: Session, task: schemas.TaskCreate, user_id: int):
     return db_task
 
 
-def get_task_by_title(db: Session, task_title: str):
+def get_task_by_title(db: Session, task_title: str, user_id: int):
     """
     this func returns a
     :param db:
+    :param user_id:
     :param task_title:
     :return:
     """
-    return db.query(models.Task).filter(models.Task.title == task_title).first()
+    return db.query(models.Task).filter(models.Task.title == task_title, models.Task.owner_id == user_id).first()
 
 
 def get_tasks_by_user(db: Session, user_id: int):
@@ -203,3 +204,13 @@ def complete_task(db: Session, user_id: int, task_id: int):
         db.commit()
         return {"Message": "successfully finished task"}
     return {}
+
+
+def get_all_users(db: Session):
+    """
+    this func returns the user given email
+    :param db:
+    :param user_email:
+    :return:
+    """
+    return db.query(models.User).all()

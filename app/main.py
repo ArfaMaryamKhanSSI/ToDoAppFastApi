@@ -1,26 +1,27 @@
-import os
 from typing import Union, List
-from celery import Celery
-from fastapi import Depends, FastAPI, HTTPException, Body, Request
+from fastapi import Depends, FastAPI, HTTPException, Body, Request, Security, Header
 from sqlalchemy.orm import Session
 from starlette import status
+from fastapi.responses import RedirectResponse
+from fastapi.security.api_key import APIKeyHeader
+from fastapi import Security
 import app.task as task
 import app.crud as crud
 import app.utils as utils
 import app.schemas as schemas
 from app.database import get_DB
+from app.task import celery
+
+api_key = APIKeyHeader(name='Authorization')
 
 app = FastAPI()
-
-celery = Celery('task', broker=os.environ.get("CELERY_BROKER_URL"),
-                backend=os.environ.get("CELERY_RESULT_BACKEND"))
 
 app.celery = celery
 
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return RedirectResponse(url='/docs')
 
 
 @app.post("/register/", tags=["todo/signup"], response_model=dict)
@@ -38,7 +39,12 @@ async def register(user: schemas.UserCreate = Body(default=None), db: Session = 
     user_db = schemas.UserCreate(email=user.email, name=user.name, password=hashed_password)
     stored_user = crud.create_user(db=db, user=user_db)
     verification_link = utils.create_token_link(db_user=stored_user, db=db)
-    r = task.send_verification_email.delay(verification_link, stored_user.email)
+    message = f"""
+        Please click this link to verify your account.
+        {verification_link}
+        """
+    subject = "Verify your account"
+    r = task.send_email.delay(message=message, subject=subject, email=stored_user.email)
     return {"message": "please confirm your account on this link", "link": verification_link, "task_id": r.id}
 
 
@@ -101,21 +107,27 @@ async def login(req: Request, user: schemas.UserLogin = None, db: Session = Depe
 
     else:
         verification_link = utils.create_token_link(db_user=db_user, db=db)
-        r = task.send_verification_email.delay(verification_link, db_user.email)
+        message = f"""
+            Please click this link to verify your account.
+            {verification_link}
+            """
+        subject = "Verify your account"
+        r = task.send_email.delay(message=message, subject=subject, email=db_user.email)
         return {"message": "please confirm your account on this link", "link": verification_link, "task_id": r.id}
 
 
 @app.post("/user/task/", response_model=dict, tags=["todo/create-task"])
 def create_task(task: schemas.TaskCreate, user: schemas.User = Depends(utils.get_current_user),
-                db: Session = Depends(get_DB)):
+                db: Session = Depends(get_DB), token: str =Security(api_key)):
     """
     this function adds task in db for user
+    :param token:
     :param task:
     :param user:
     :param db:
     :return:
     """
-    if_exist = crud.get_task_by_title(db=db, task_title=task.title)
+    if_exist = crud.get_task_by_title(db=db, task_title=task.title, user_id=user.id)
     if if_exist:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -126,7 +138,8 @@ def create_task(task: schemas.TaskCreate, user: schemas.User = Depends(utils.get
 
 
 @app.get("/user/tasks/", response_model=List[schemas.Task], tags=["todo/get-tasks"])
-def get_user_tasks(user: schemas.User = Depends(utils.get_current_user), db: Session = Depends(get_DB)):
+def get_user_tasks(user: schemas.User = Depends(utils.get_current_user), db: Session = Depends(get_DB),
+                   token: str =Security(api_key)):
     """
     this function returns tasks by specific user
     :param user:
@@ -138,9 +151,11 @@ def get_user_tasks(user: schemas.User = Depends(utils.get_current_user), db: Ses
 
 @app.put("/user/task/{task_id}", response_model=dict, tags=["todo/update-tasks"])
 async def update_task(task_id: int, user: schemas.User = Depends(utils.get_current_user),
-                      task: schemas.TaskCreate = None, db: Session = Depends(get_DB)):
+                      task: schemas.TaskCreate = None, db: Session = Depends(get_DB),
+                      token: str =Security(api_key)):
     """
     this function updates user task
+    :param token:
     :param task_id:
     :param user:
     :param task:
@@ -155,7 +170,7 @@ async def update_task(task_id: int, user: schemas.User = Depends(utils.get_curre
 
 @app.delete("/user/task/{task_id}", response_model=dict, tags=["todo/delete-tasks"])
 def delete_user_task(user: schemas.User = Depends(utils.get_current_user), task_id: int = 0,
-                     db: Session = Depends(get_DB)):
+                     db: Session = Depends(get_DB), token: str =Security(api_key)):
     """
     this function deletes a certain task by user
     :param user:
@@ -170,7 +185,8 @@ def delete_user_task(user: schemas.User = Depends(utils.get_current_user), task_
 
 
 @app.put("/user/complete-task/{task_id}", response_model=dict, tags=["todo/complete-tasks"])
-def complete_task(*, user: schemas.User = Depends(utils.get_current_user), task_id: int, db: Session = Depends(get_DB)):
+def complete_task(user: schemas.User = Depends(utils.get_current_user), task_id: int = 0,
+                  db: Session = Depends(get_DB), token:str=Security(api_key)):
     """
     changes status of user task
     :param user:
@@ -185,7 +201,8 @@ def complete_task(*, user: schemas.User = Depends(utils.get_current_user), task_
 
 
 @app.get("/user/complete-tasks/", response_model=Union[List[schemas.Task], dict], tags=["todo/all-complete-tasks"])
-def get_user_finished_tasks(*, user: schemas.User = Depends(utils.get_current_user), db: Session = Depends(get_DB)):
+def get_user_finished_tasks(user: schemas.User = Depends(utils.get_current_user), db: Session = Depends(get_DB),
+                            token:str=Security(api_key)):
     """
     returns all the finished tasks
     :param user:
@@ -199,7 +216,8 @@ def get_user_finished_tasks(*, user: schemas.User = Depends(utils.get_current_us
 
 
 @app.get("/user/due-today/", response_model=Union[List[schemas.Task], dict], tags=["todo/tasks-due-today"])
-def get_user_due_today_tasks(*, user: schemas.User = Depends(utils.get_current_user), db: Session = Depends(get_DB)):
+def get_user_due_today_tasks(user: schemas.User = Depends(utils.get_current_user), db: Session = Depends(get_DB),
+                             token:str=Security(api_key)):
     """
     returns all the tasks due today
     :param user:
