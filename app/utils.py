@@ -6,6 +6,9 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from starlette import status
 import os
+
+from starlette.status import HTTP_403_FORBIDDEN
+
 import app.crud as crud
 import app.schemas as schemas
 from app.database import get_DB
@@ -161,20 +164,30 @@ async def get_current_user(req: Request, db: Session = Depends(get_DB)):
     :param db:
     :return:
     """
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials"
-    )
     try:
+        if not req.headers.get("Authorization"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="No Authorization token provided."
+            )
         token = req.headers["Authorization"]
-        token = token.split(" ")[1]
+        if "Bearer" in token:
+            token = token.split(" ")[1]
         payload = decode_token(token)
         if not payload:
-            raise credentials_exception
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials"
+            )
         email: str = payload.get("email")
     except JWTError:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN, detail="Could not validate API KEY"
+        )
     user = crud.get_user_by_email(db, email)
     if user is None:
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
     return user
